@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Task Manager</title>
+
+<style>
+:root{
+  --bg:#0b1220;
+  --card:rgba(255,255,255,0.08);
+  --text:#e5e7eb;
+  --muted:#9ca3af;
+  --primary:#6366f1;
+  --good:#22c55e;
+  --warn:#f59e0b;
+  --bad:#ef4444;
+  --border:rgba(255,255,255,0.12);
+}
+
+body{
+  margin:0;
+  font-family:system-ui;
+  background:linear-gradient(135deg,#0b1220,#111827);
+  color:var(--text);
+}
+
+/* HEADER */
+header{
+  padding:15px 20px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+/* CONTAINER */
+.container{
+  max-width:1100px;
+  margin:auto;
+  padding:10px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:260px 1fr;
+  gap:15px;
+}
+
+/* PANELS */
+.panel{
+  background:var(--card);
+  backdrop-filter:blur(14px);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:14px;
+}
+
+/* INPUTS */
+input, select{
+  width:100%;
+  padding:10px;
+  margin-top:8px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--text);
+  box-sizing:border-box;
+}
+
+button{
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  background:var(--primary);
+  color:var(--text);
+  cursor:pointer;
+  margin-top:8px;
+}
+
+/* SIDEBAR BUTTONS */
+.panel button + button{
+  margin-top:6px;
+}
+
+/* TASK CARD */
+.task{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  padding:12px;
+  margin-bottom:10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  animation:fade .25s ease;
+  cursor:grab;
+  gap:12px;
+}
+
+.task:active{
+  cursor:grabbing;
+}
+
+@keyframes fade{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+.done{
+  text-decoration:line-through;
+  opacity:.5;
+}
+
+.small{
+  font-size:12px;
+  color:var(--muted);
+}
+
+/* PRIORITY BADGES */
+.badge{
+  font-size:11px;
+  padding:3px 6px;
+  border-radius:8px;
+  display:inline-block;
+}
+
+.high{background:#ef4444;}
+.medium{background:#f59e0b;}
+.low{background:#22c55e;}
+
+/* ACTION BUTTONS */
+.actions{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  align-items:flex-end;
+}
+
+.actions button{
+  width:auto;
+  padding:6px 8px;
+  font-size:12px;
+}
+
+/* SUBTASKS */
+.subtasks{
+  margin-top:8px;
+  font-size:12px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.subtasks input{
+  width:auto;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>✨ My Task Manager</h2>
+  <button onclick="notifyMe()">Enable Notifications</button>
+</header>
+
+<div class="container">
+<div class="grid">
+
+<!-- SIDEBAR -->
+<div class="panel">
+  <h3>➕ Add Task</h3>
+
+  <input id="title" placeholder="Task title">
+
+  <select id="priority">
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+    <option value="low">Low</option>
+  </select>
+
+  <input id="date" type="date">
+
+  <button onclick="addTask()">Add Task</button>
+
+  <hr style="margin:12px 0;border:1px solid var(--border)">
+
+  <button onclick="setView('all')">All</button>
+  <button onclick="setView('important')">⭐ Important</button>
+  <button onclick="setView('done')">✅ Completed</button>
+</div>
+
+<!-- MAIN -->
+<div class="panel">
+  <h3>Tasks</h3>
+  <input placeholder="Search..." oninput="render(this.value)">
+
+  <div id="list"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+let tasks = JSON.parse(localStorage.getItem("v2")) || [];
+let view = "all";
+
+function save(){
+  localStorage.setItem("v2", JSON.stringify(tasks));
+}
+
+/* ADD TASK */
+function addTask(){
+  let t = document.getElementById("title").value;
+  let p = document.getElementById("priority").value;
+  let d = document.getElementById("date").value;
+
+  if(!t) return;
+
+  tasks.push({
+    id: Date.now(),
+    title: t,
+    priority: p,
+    date: d,
+    done: false,
+    important: false,
+    subtasks: []
+  });
+
+  save();
+  render();
+}
+
+/* TOGGLE */
+function toggle(id){
+  tasks = tasks.map(t =>
+    t.id === id ? {...t, done: !t.done} : t
+  );
+  save();
+  render();
+}
+
+/* DELETE */
+function del(id){
+  tasks = tasks.filter(t => t.id !== id);
+  save();
+  render();
+}
+
+/* STAR */
+function star(id){
+  tasks = tasks.map(t =>
+    t.id === id ? {...t, important: !t.important} : t
+  );
+  save();
+  render();
+}
+
+/* EDIT */
+function edit(id){
+  let newTitle = prompt("Edit task:");
+  if(!newTitle) return;
+
+  tasks = tasks.map(t =>
+    t.id === id ? {...t, title: newTitle} : t
+  );
+
+  save();
+  render();
+}
+
+/* SUBTASK */
+function addSub(id){
+  let sub = prompt("Add subtask:");
+  if(!sub) return;
+
+  tasks = tasks.map(t =>
+    t.id === id
+      ? {...t, subtasks: [...t.subtasks, {text: sub, done:false}]}
+      : t
+  );
+
+  save();
+  render();
+}
+
+function toggleSub(id,i){
+  tasks = tasks.map(t=>{
+    if(t.id === id){
+      t.subtasks[i].done = !t.subtasks[i].done;
+    }
+    return t;
+  });
+  save();
+  render();
+}
+
+/* VIEW */
+function setView(v){
+  view = v;
+  render();
+}
+
+/* DRAG DROP */
+let dragId = null;
+
+function drag(e,id){
+  dragId = id;
+}
+
+function drop(id){
+  let from = tasks.findIndex(t => t.id === dragId);
+  let to = tasks.findIndex(t => t.id === id);
+
+  let moved = tasks.splice(from,1)[0];
+  tasks.splice(to,0,moved);
+
+  save();
+  render();
+}
+
+/* NOTIFICATIONS */
+function notifyMe(){
+  Notification.requestPermission();
+}
+
+/* RENDER */
+function render(search=""){
+  let f = tasks.filter(t =>
+    t.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if(view === "done") f = f.filter(t => t.done);
+  if(view === "important") f = f.filter(t => t.important);
+
+  document.getElementById("list").innerHTML =
+    f.map(t => `
+      <div class="task"
+        draggable="true"
+        ondragstart="drag(event,${t.id})"
+        ondragover="event.preventDefault()"
+        ondrop="drop(${t.id})">
+
+        <div>
+          <div class="${t.done ? 'done' : ''}">
+            <input type="checkbox"
+              ${t.done ? 'checked' : ''}
+              onclick="toggle(${t.id})">
+            ${t.title}
+          </div>
+
+          <div class="small">${t.date || ""}</div>
+
+          <div class="subtasks">
+            ${t.subtasks.map((s,i)=>`
+              <div>
+                <input type="checkbox"
+                  ${s.done ? 'checked' : ''}
+                  onclick="toggleSub(${t.id},${i})">
+                ${s.text}
+              </div>
+            `).join("")}
+          </div>
+        </div>
+
+        <div class="actions">
+          <span class="badge ${t.priority}">${t.priority}</span>
+          <button onclick="star(${t.id})">⭐</button>
+          <button onclick="addSub(${t.id})">➕</button>
+          <button onclick="edit(${t.id})">✏️</button>
+          <button onclick="del(${t.id})">❌</button>
+        </div>
+      </div>
+    `).join("");
+}
+
+render();
+</script>
+
+</body>
+</html>
